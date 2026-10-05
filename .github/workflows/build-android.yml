@@ -1,0 +1,66 @@
+name: Build Echo Dot 3 librespot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-android.yml'
+      - 'scripts/**'
+      - 'src/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Rust 1.86 + Android ARMv7 target
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+        with:
+          toolchain: 1.86.0
+          targets: armv7-linux-androideabi
+
+      - name: Install Android NDK r27d
+        id: setup-ndk
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
+        with:
+          ndk-version: r27d
+          add-to-path: false
+
+      - name: Install cargo-ndk 4.1.2
+        run: cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Build and verify ARMv7 Android binaries
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: bash scripts/build-librespot-android.sh
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          cp scripts/start-spotify.sh out/
+          cp scripts/install-to-echo.sh out/
+          tar -C out -czf echo-spotify-armv7-android24.tar.gz \
+            librespot spotify-netexec spotify-mixplay \
+            start-spotify.sh install-to-echo.sh BUILD-INFO.txt
+          sha256sum echo-spotify-armv7-android24.tar.gz > echo-spotify-armv7-android24.tar.gz.sha256
+          sha256sum out/librespot out/spotify-netexec out/spotify-mixplay > binaries.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: echo-spotify-armv7-android24
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            echo-spotify-armv7-android24.tar.gz
+            echo-spotify-armv7-android24.tar.gz.sha256
+            binaries.sha256
+            out/BUILD-INFO.txt
