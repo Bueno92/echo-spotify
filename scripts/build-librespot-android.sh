@@ -58,6 +58,26 @@ BIN="$WORK/librespot/target/$TARGET/release/librespot"
 cp "$BIN" "$OUT/librespot"
 chmod 755 "$OUT/librespot"
 
+# Build the same pinned sources and feature set for the CI host so we can run
+# --help there. The Android binary itself cannot execute on the x86_64 runner.
+HELP="$WORK/librespot-help.txt"
+echo "Verifying librespot CLI options with a native host build..."
+(
+  cd "$WORK/librespot"
+  cargo run \
+    --release \
+    --no-default-features \
+    --features "rustls-tls-webpki-roots,with-libmdns" \
+    -- \
+    --help > "$HELP"
+)
+for flag in backend device format zeroconf-backend zeroconf-port device-type disable-audio-cache system-cache; do
+  grep -q -- "--$flag" "$HELP" || {
+    echo "ERROR: librespot --help missing CLI option --$flag" >&2
+    exit 1
+  }
+done
+
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
 if [[ -z "$NDK" ]]; then
   for base in "$HOME/Library/Android/sdk/ndk" "$HOME/Android/Sdk/ndk"; do
@@ -99,16 +119,6 @@ if printf '%s\n' "$DYNAMIC" | grep -Eqi 'libssl|libcrypto|libasound|libpulse|lib
   exit 1
 fi
 
-# Confirm the pinned source exposes the exact CLI options used by start-spotify.sh.
-# Do not execute the ARM/Android binary on this x86_64 build host.
-MAIN_RS="$WORK/librespot/src/main.rs"
-for flag in backend device format zeroconf-backend zeroconf-port device-type disable-audio-cache system-cache; do
-  grep -q '"'"$flag"'"' "$MAIN_RS" || {
-    echo "ERROR: pinned librespot source missing CLI option --$flag" >&2
-    exit 1
-  }
-done
-
 {
   echo "librespot_commit=$LIBRESPOT_COMMIT"
   echo "target=$TARGET"
@@ -126,6 +136,8 @@ done
   "$READELF" -d "$OUT/spotify-netexec"
   echo "--- spotify-mixplay dynamic dependencies ---"
   "$READELF" -d "$OUT/spotify-mixplay"
+  echo "--- librespot --help ---"
+  cat "$HELP"
 } > "$OUT/BUILD-INFO.txt"
 
 echo "OK: build output in $OUT"
