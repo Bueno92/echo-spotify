@@ -35,12 +35,11 @@ chown "$DAEMON_USER" $D/state/spotify "$CACHE" 2>/dev/null || true
 chmod 700 $D/state/spotify "$CACHE" 2>/dev/null || true
 
 echo "Spotify Connect \"$SPOTIFY_NAME\", $BITRATE kbit/s, TCP $ZEROCONF_PORT; echo-dot-assist in $HD"
-# Two processes on a pipe, each with the group it needs.  librespot: group 3990 as its effective group
-# (spotify-netexec), so its sockets pass the firewall's --gid-owner 3990 rule; it needs no mixer.  mixplay: aipc
-# effective, as the mixer wants; it needs no network.  (The first version ran mixplay under librespot through
-# spotify-mixplay; with 3990 effective, librespot's children can no longer get aipc back.)
-"$HD/runas" -r 3990 "$DAEMON_USER" "$DAEMON_GROUPS" \
-    "$S/spotify-netexec" \
+# Two processes on a pipe, each with the group it needs.  librespot: 3990 first in runas's list = its real, effective
+# and saved group, so exec leaves its file system group 3990 too and its sockets pass the firewall's --gid-owner 3990
+# rule; it needs no mixer.  mixplay: aipc effective, as the mixer wants; it needs no network.  (The first version had
+# spotify-netexec call setfsgid(3990) before exec'ing librespot, which the exec undid, and spotify-mixplay; both gone.)
+"$HD/runas" "$DAEMON_USER" "3990,$DAEMON_GROUPS" \
     "$S/librespot" \
       --name "$SPOTIFY_NAME" \
       --device-type speaker \

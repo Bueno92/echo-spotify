@@ -97,19 +97,11 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
-CC="$TOOLCHAIN/armv7a-linux-androideabi${API}-clang"
 READELF="$TOOLCHAIN/llvm-readelf"
-[[ -x "$CC" ]] || { echo "ERROR: Android clang not found: $CC" >&2; exit 1; }
 [[ -x "$READELF" ]] || { echo "ERROR: llvm-readelf not found: $READELF" >&2; exit 1; }
 
-for src in spotify-netexec spotify-mixplay; do
-  "$CC" -O2 -fPIE -pie -Wall -Wextra -Werror \
-    "$ROOT/src/$src.c" -o "$OUT/$src"
-  chmod 755 "$OUT/$src"
-done
-
-python3 "$ROOT/scripts/verify-elf.py" \
-  "$OUT/librespot" "$OUT/spotify-netexec" "$OUT/spotify-mixplay"
+# librespot is the only binary: echo-dot-assist's runas gives it group 3990 (start-spotify.sh), or hassmic does
+python3 "$ROOT/scripts/verify-elf.py" "$OUT/librespot"
 
 # Fail if librespot accidentally gains host audio/OpenSSL dependencies.
 DYNAMIC="$($READELF -d "$OUT/librespot")"
@@ -132,13 +124,9 @@ fi
   "$READELF" -h "$OUT/librespot"
   echo "--- librespot dynamic dependencies ---"
   "$READELF" -d "$OUT/librespot"
-  echo "--- spotify-netexec dynamic dependencies ---"
-  "$READELF" -d "$OUT/spotify-netexec"
-  echo "--- spotify-mixplay dynamic dependencies ---"
-  "$READELF" -d "$OUT/spotify-mixplay"
   echo "--- librespot --help ---"
   cat "$HELP"
 } > "$OUT/BUILD-INFO.txt"
 
 echo "OK: build output in $OUT"
-ls -lh "$OUT/librespot" "$OUT/spotify-netexec" "$OUT/spotify-mixplay" "$OUT/BUILD-INFO.txt"
+ls -lh "$OUT/librespot" "$OUT/BUILD-INFO.txt"

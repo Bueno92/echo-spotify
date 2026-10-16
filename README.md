@@ -20,12 +20,12 @@ Amazon mixer -> Echo speaker
 ```
 
 The `echo-dot-assist` firewall lets out to the Internet only sockets created with the file system group 3990
-(`--gid-owner 3990`). `spotify-netexec` makes 3990 librespot's real, effective and saved group before exec'ing it; exec
-then sets the file system group to it as well. The first version called `setfsgid(3990)` and then exec'd librespot:
-exec resets the file system group to the effective one (aipc), so librespot would have been held to the LAN (checked on
-a PC: `Gid: 3990 1000 1000 1000` after the exec). With 3990 effective, librespot's children cannot get aipc back, so
-the sound now leaves through a pipe to a `mixplay` started separately with aipc; `spotify-mixplay` is no longer used
-(still built). hassmic's switch starts librespot with 3990 itself and needs neither.
+(`--gid-owner 3990`). librespot is started with 3990 as its real, effective and saved group (echo-dot-assist's `runas
+<user> 3990,<groups>` in `start-spotify.sh`, or hassmic itself); exec then sets its file system group to 3990 as well.
+librespot needs no mixer: its sound leaves through a pipe, to a `mixplay` started separately with the mixer's group
+aipc, or to hassmic. The first version had two wrappers, `spotify-netexec` (`setfsgid(3990)` then exec, which the exec
+undoes: checked on a PC, `Gid: 3990 1000 1000 1000` after it, so librespot would have been held to the LAN) and
+`spotify-mixplay`; both are gone, librespot is the only binary.
 
 ## Double-checked assumptions
 
@@ -33,11 +33,11 @@ the sound now leaves through a pipe to a `mixplay` started separately with aipc;
 - Upstream build target used by `echo-dot-assist`: `armv7a-linux-androideabi24`.
 - Rust Android target: `armv7-linux-androideabi`.
 - librespot v0.8.0 playback constants: 44,100 Hz, stereo.
-- librespot `subprocess` backend parses a command string and pipes raw PCM to its stdin.
+- librespot `pipe` backend writes raw PCM to its stdout.
 - `echo-dot-assist` provides `mixplay` and a `Music` mixer stream.
 - The lockdown permits inbound TCP/UDP only in 16384–32767. Spotify Connect is therefore pinned to TCP `24879`, which is inside that range and does not collide with the documented `echo-dot-assist` ports (16700, 26053, 28928, 28929, 28930).
 - The lockdown's egress exception is `--gid-owner 3990`.
-- `echo-dot-assist` itself uses temporary `setfsgid(real_gid)` when creating unrestricted sockets. V3 mirrors that design for librespot while restoring mixer fsgid for `mixplay`.
+- `echo-dot-assist` itself uses temporary `setfsgid(real_gid)` when creating unrestricted sockets. That does not carry over an exec (execve resets fsgid to egid), so librespot gets 3990 as its effective group instead (runas `3990,<groups>`, or hassmic).
 
 ## Source pins
 
@@ -58,8 +58,7 @@ Expected files:
 ```text
 out/
 ├── librespot
-├── spotify-netexec
-├── spotify-mixplay
+├── SHA256SUMS      (CI)
 └── BUILD-INFO.txt
 ```
 
