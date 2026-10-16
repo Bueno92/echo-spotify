@@ -66,32 +66,46 @@ export ANDROID_NDK_HOME=/path/to/android-ndk
 bash scripts/build-librespot-android.sh
 ```
 
-## When the Echo arrives
+## Installing on the Echo
 
-First install upstream `echo-dot-assist` and confirm normal Assist/audio operation. Do not mix debugging Spotify with first-time Echo rooting.
+First install echo-dot-assist and confirm normal Assist/audio operation. Do not mix debugging Spotify with first-time
+Echo rooting.
 
-Then:
+From a checkout (after a local build, binaries in `out/`) or from the unpacked CI archive (binaries next to the script,
+checked against its `SHA256SUMS`):
 
 ```bash
-bash scripts/install-to-echo.sh
-adb shell '/data/local/hassmic/start-spotify.sh'
+bash scripts/install-to-echo.sh          # or: bash install-to-echo.sh in the unpacked archive
+adb shell /data/local/hassmic/spotify/start-spotify.sh
 ```
 
-First test stays in the foreground. Do **not** autostart yet.
+Everything goes into `/data/local/hassmic/spotify/` (root-owned, 755), apart from echo-dot-assist: its updates never
+touch that folder. The script finds echo-dot-assist's `runas`, `mixplay` and `device.conf` where an installed Echo has
+them (`/data/local/hassmic/ota/current`, else `/system/hassmic`), checks each copy on the Echo, and removes the files of
+the first PoC from `/data/local/hassmic/`.
 
-Expected behavior:
+### 1. Foreground test
+
+`start-spotify.sh` runs librespot in the foreground (Ctrl-C ends it), its sound through `mixplay -t Music`, hassmic
+running beside it. Name and bitrate from `spotify.conf` next to it. Expected behavior:
 
 1. librespot starts without TLS/audio dependency errors.
-2. `Echo Salon` appears in Spotify > Available devices on an iPhone on the same LAN.
+2. `Echo Salon` appears in Spotify > Available devices on a phone on the same LAN.
 3. Selecting it plays through the Dot speaker.
 4. Amazon cloud services remain blocked by the original lockdown.
 5. Assist still works after stopping Spotify.
 
-## Phase 2 after PoC success
+Repeat it (several sessions, a restart of the Echo in between) before step 2.
 
-- boot autostart
-- expose Spotify state to Home Assistant
-- voice command routing (`joue X sur salon`)
-- assistant duck/pause/resume integration
-- hardware/Spotify volume synchronization
-- clean upstream-able integration into `echo-dot-assist`
+### 2. hassmic's switch (the autostart)
+
+echo-dot-assist builds with `spotify.c` list a **Spotify Connect** card on the settings page (Features) once the files
+above are installed. Off by default; switch it on only after the foreground test passes every time. hassmic then runs
+the same librespot itself, under the Echo's name, and plays its PCM (`--backend pipe`) through its own mixer stream:
+ducked while you talk to the Echo, at the Echo's volume (the app's slider sets it, `--volume-ctrl fixed`), stopped by a
+newer source (Music Assistant, Bluetooth). Its login cache is the one the foreground test used
+(`/data/local/hassmic/state/spotify/cache`, 0700). Not both at once: the foreground test refuses to start while
+hassmic's runs (TCP 24879).
+
+What differs from the foreground test, and is checked only on the Echo: the pipe backend instead of `subprocess` +
+`spotify-mixplay`, and `--onevent` (a shell script hassmic writes into `state/spotify`).

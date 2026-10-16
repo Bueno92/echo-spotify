@@ -47,8 +47,9 @@ jobs:
           set -euo pipefail
           cp scripts/start-spotify.sh out/
           cp scripts/install-to-echo.sh out/
+          (cd out && sha256sum librespot spotify-netexec spotify-mixplay > SHA256SUMS)
           tar -C out -czf echo-spotify-armv7-android24.tar.gz \
-            librespot spotify-netexec spotify-mixplay \
+            librespot spotify-netexec spotify-mixplay SHA256SUMS \
             start-spotify.sh install-to-echo.sh BUILD-INFO.txt
           sha256sum echo-spotify-armv7-android24.tar.gz > echo-spotify-armv7-android24.tar.gz.sha256
           sha256sum out/librespot out/spotify-netexec out/spotify-mixplay > binaries.sha256
