@@ -2,21 +2,25 @@
 #define _GNU_SOURCE
 #endif
 #include <stdio.h>
-#include <sys/fsuid.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 /*
- * Run a command with fsgid == real gid.
+ * Run a command with the real group (NET_GID 3990) as its real, effective
+ * and saved group.
  *
  * echo-dot-assist launches hassmic with:
  *   real gid = NET_GID (3990)
  *   effective gid = aipc
- * and its firewall owner rule allows sockets tagged with gid 3990.
- *
- * For librespot we keep fsgid=3990 for the lifetime of the process so all
- * sockets created deep inside Rust/tokio inherit the allowed socket owner.
- * spotify-mixplay restores fsgid to egid before opening Amazon mixer paths.
+ * and its firewall owner rule (--gid-owner 3990) reads the file system group
+ * a socket was created with.  hassmic switches it with setfsgid() around each
+ * socket; that does not survive an exec: execve sets the file system group to
+ * the effective one.  The first version did setfsgid() and then exec'd
+ * librespot, which therefore ran with fsgid = aipc and was held to local
+ * addresses (checked on a PC: Gid "3990 1000 1000 1000" after the exec).
+ * With 3990 effective, exec keeps fsgid = 3990 for librespot's whole life.
+ * librespot needs no mixer: its sound goes through a pipe to mixplay, which
+ * runs with aipc (start-spotify.sh), or to hassmic.
  */
 int main(int argc, char **argv)
 {
@@ -26,20 +30,12 @@ int main(int argc, char **argv)
     }
 
     gid_t rgid = getgid();
-    gid_t egid = getegid();
-    gid_t old = setfsgid(rgid);
-    gid_t now = setfsgid((gid_t)-1);
-
-    if (now != rgid) {
-        fprintf(stderr,
-                "spotify-netexec: setfsgid failed: rgid=%u egid=%u old=%u now=%u\n",
-                (unsigned)rgid, (unsigned)egid, (unsigned)old, (unsigned)now);
+    if (setresgid(rgid, rgid, rgid)) {
+        perror("spotify-netexec: setresgid");
         return 1;
     }
-
-    fprintf(stderr,
-            "spotify-netexec: rgid=%u egid=%u fsgid=%u; exec %s\n",
-            (unsigned)rgid, (unsigned)egid, (unsigned)now, argv[1]);
+    fprintf(stderr, "spotify-netexec: gid %u (real, effective, saved, file system); exec %s\n",
+            (unsigned)rgid, argv[1]);
 
     execvp(argv[1], &argv[1]);
     perror("spotify-netexec: execvp");

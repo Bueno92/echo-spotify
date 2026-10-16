@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # Foreground test of Spotify Connect on an Echo Dot 3 with echo-dot-assist, as root over adb (Ctrl-C ends it):
 #   adb shell /data/local/hassmic/spotify/start-spotify.sh
-# librespot plays through mixplay on the mixer's Music stream, beside hassmic, which keeps running.  This is the test
+# librespot's sound goes through a pipe into mixplay on the mixer's Music stream, beside hassmic, which keeps running.  This is the test
 # to pass, reproducibly, before hassmic's own "Spotify Connect" switch (which runs the same librespot, its sound through
 # hassmic instead of mixplay).  Not both at once: they would share TCP 24879.
 set -u
@@ -35,21 +35,22 @@ chown "$DAEMON_USER" $D/state/spotify "$CACHE" 2>/dev/null || true
 chmod 700 $D/state/spotify "$CACHE" 2>/dev/null || true
 
 echo "Spotify Connect \"$SPOTIFY_NAME\", $BITRATE kbit/s, TCP $ZEROCONF_PORT; echo-dot-assist in $HD"
-# runas -r 3990 keeps effective gid=aipc for Amazon mixer identity while
-# setting real gid=3990. spotify-netexec then keeps fsgid=3990 for librespot's
-# sockets. spotify-mixplay restores fsgid=aipc before executing mixplay.
-exec "$HD/runas" -r 3990 "$DAEMON_USER" "$DAEMON_GROUPS" \
+# Two processes on a pipe, each with the group it needs.  librespot: group 3990 as its effective group
+# (spotify-netexec), so its sockets pass the firewall's --gid-owner 3990 rule; it needs no mixer.  mixplay: aipc
+# effective, as the mixer wants; it needs no network.  (The first version ran mixplay under librespot through
+# spotify-mixplay; with 3990 effective, librespot's children can no longer get aipc back.)
+"$HD/runas" -r 3990 "$DAEMON_USER" "$DAEMON_GROUPS" \
     "$S/spotify-netexec" \
     "$S/librespot" \
       --name "$SPOTIFY_NAME" \
       --device-type speaker \
       --bitrate "$BITRATE" \
-      --backend subprocess \
+      --backend pipe \
       --zeroconf-backend libmdns \
       --zeroconf-port "$ZEROCONF_PORT" \
       --format S16 \
-      --device "$S/spotify-mixplay $HD/mixplay -t Music -r 44100 -c 2" \
       --cache "$CACHE" \
       --system-cache "$CACHE" \
       --initial-volume 100 \
-      --disable-audio-cache
+      --disable-audio-cache \
+  | "$HD/runas" "$DAEMON_USER" "$DAEMON_GROUPS" "$HD/mixplay" -t Music -r 44100 -c 2

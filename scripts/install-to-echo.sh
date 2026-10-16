@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Installs the Spotify Connect binaries on an Echo Dot 3 running echo-dot-assist, apart from it:
-#   /data/local/hassmic/spotify/{librespot,spotify-netexec,spotify-mixplay,start-spotify.sh,spotify.conf}
+#   /data/local/hassmic/spotify/{librespot,spotify-netexec,start-spotify.sh,spotify.conf}
 # hassmic updates (OTA bundles) never touch that folder, and hassmic (from the build that has spotify.c) lists its
-# "Spotify Connect" switch only where librespot and spotify-netexec are there.  Nothing starts by itself: first the
+# "Spotify Connect" switch only where librespot is there (spotify-netexec is the foreground test's).  Nothing starts by itself: first the
 # foreground test (start-spotify.sh), then, once it works, the switch on hassmic's settings page.
 #
 # Works from a checkout (binaries in out/) and from the CI archive (binaries next to this script).  Checks the
@@ -12,7 +12,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 D=/data/local/hassmic
 S=$D/spotify
-FILES="librespot spotify-netexec spotify-mixplay"
+FILES="librespot spotify-netexec"        # spotify-mixplay: no longer used (start-spotify.sh)
 
 if [[ -f "$HERE/librespot" ]]; then BIN="$HERE"; else BIN="$HERE/../out"; fi
 START="$HERE/start-spotify.sh"; [[ -f "$START" ]] || START="$HERE/../scripts/start-spotify.sh"
@@ -53,9 +53,9 @@ done
 adb push "$START" "$S/start-spotify.sh" >/dev/null
 adb shell "chown root:root $S/start-spotify.sh && chmod 755 $S/start-spotify.sh"
 adb shell "[ -f $S/spotify.conf ] || printf '%s\n' '# start-spotify.sh (foreground test) only; hassmic names it after the Echo' 'SPOTIFY_NAME=\"Echo Salon\"' 'BITRATE=\"320\"' > $S/spotify.conf; chmod 600 $S/spotify.conf"
-adb shell "rm -f $D/librespot $D/spotify-netexec $D/spotify-mixplay $D/start-spotify.sh"   # an install of the first PoC
+adb shell "rm -f $D/librespot $D/spotify-netexec $D/spotify-mixplay $D/start-spotify.sh $S/spotify-mixplay"   # the first PoC's
 
-if sh_echo "grep -c spotify-netexec $HD/hassmic" | grep -qv '^0$'; then
+if sh_echo "grep -c api/spotify/name $HD/hassmic" | grep -qv '^0$'; then
   echo "This hassmic has the Spotify Connect switch (settings page, Features); leave it off until the foreground test works."
 else
   echo "This hassmic has no Spotify Connect switch yet (a build from before it): only the foreground test applies."

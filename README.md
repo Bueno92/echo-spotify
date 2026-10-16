@@ -8,17 +8,24 @@ Goal: turn a rooted Echo Dot 3 (2018, `donut` / D9N29T) running `Gamer92000/echo
 Spotify app / Spotify cloud
         |
         v
-librespot (ARMv7 Android 24)
+librespot (ARMv7 Android 24), group 3990: may reach the Internet
         |
-        | raw PCM S16 / 44.1 kHz / stereo
+        | raw PCM S16 / 44.1 kHz / stereo on a pipe (--backend pipe)
         v
-spotify-mixplay -> mixplay -t Music
+mixplay -t Music (foreground test), group aipc: may use the mixer
+   or hassmic (its Spotify Connect switch)
         |
         v
 Amazon mixer -> Echo speaker
 ```
 
-`spotify-netexec` gives librespot's sockets the network filesystem-group (`3990`) expected by the `echo-dot-assist` firewall. `spotify-mixplay` restores the effective mixer group before starting `mixplay`, so mixer access is not broken by the network fsgid.
+The `echo-dot-assist` firewall lets out to the Internet only sockets created with the file system group 3990
+(`--gid-owner 3990`). `spotify-netexec` makes 3990 librespot's real, effective and saved group before exec'ing it; exec
+then sets the file system group to it as well. The first version called `setfsgid(3990)` and then exec'd librespot:
+exec resets the file system group to the effective one (aipc), so librespot would have been held to the LAN (checked on
+a PC: `Gid: 3990 1000 1000 1000` after the exec). With 3990 effective, librespot's children cannot get aipc back, so
+the sound now leaves through a pipe to a `mixplay` started separately with aipc; `spotify-mixplay` is no longer used
+(still built). hassmic's switch starts librespot with 3990 itself and needs neither.
 
 ## Double-checked assumptions
 
@@ -107,5 +114,6 @@ newer source (Music Assistant, Bluetooth). Its login cache is the one the foregr
 (`/data/local/hassmic/state/spotify/cache`, 0700). Not both at once: the foreground test refuses to start while
 hassmic's runs (TCP 24879).
 
-What differs from the foreground test, and is checked only on the Echo: the pipe backend instead of `subprocess` +
-`spotify-mixplay`, and `--onevent` (a shell script hassmic writes into `state/spotify`).
+What differs from the foreground test, and is checked only on the Echo: hassmic reads the pipe instead of mixplay, and
+`--onevent` (a shell script hassmic writes into `state/spotify`). The name in the Spotify app is the Echo's unless one
+is set in the card ("Name in Spotify").
